@@ -1,0 +1,8 @@
+{
+  "name": "EMS - Enterprise Maintenance System",
+  "description": "نظام إدارة صيانة مؤسسي متكامل بتصميم زجاجي، يدعم اللغة العربية، ويوفر تحكم إداري كامل.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
