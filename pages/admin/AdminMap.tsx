@@ -13,7 +13,7 @@ interface MapEntity {
   lng: number;
 }
 
-interface MapBranch extends Branch, MapEntity {
+interface MapBranch extends Omit<Branch, 'lat' | 'lng'>, MapEntity {
   hasCritical?: boolean;
 }
 

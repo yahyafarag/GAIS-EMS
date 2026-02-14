@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Role, SystemConfig, DynamicField, Report, ReportStatus, ReportAnswer } from '../types';
+import { User, Role, SystemConfig, DynamicField, Report, ReportStatus, ReportAnswer, Branch } from '../types';
 import { api } from '../services/api';
 
 type ConfigSection = 'reportQuestions' | 'repairFields';
@@ -17,11 +17,34 @@ interface AppContextType {
   removeField: (section: ConfigSection, fieldId: string) => Promise<void>;
   updateField: (section: ConfigSection, fieldId: string, updates: Partial<DynamicField>) => Promise<void>;
   updateFieldOrder: (section: ConfigSection, sourceIndex: number, destIndex: number) => Promise<void>;
+  reorderFields: (section: ConfigSection, newOrder: DynamicField[]) => Promise<void>;
   updateFeature: (feature: string, value: boolean) => Promise<void>;
+
+  // --- Management Functions ---
+  manageUser: (action: 'SAVE' | 'DELETE', data: Partial<User>) => Promise<void>;
+  manageBranch: (action: 'SAVE' | 'DELETE', data: Partial<Branch>) => Promise<void>;
 
   // --- Report Functions ---
   createReport: (reportData: Partial<Report>, dynamicValues: Record<string, any>) => Promise<Report>;
 }
+
+// --- Default Configuration (Fallback) ---
+const DEFAULT_CONFIG: SystemConfig = {
+    reportQuestions: [
+        { id: 'q1', labelAr: 'وصف المشكلة بالتفصيل', type: 'textarea', required: true, step: 1, order: 1 },
+        { id: 'q2', labelAr: 'صورة للمشكلة', type: 'image', required: true, step: 1, order: 2 }
+    ],
+    repairFields: [
+        { id: 'r1', labelAr: 'تم الإصلاح عن طريق', type: 'textarea', required: true, step: 1, order: 1 },
+        { id: 'r2', labelAr: 'صورة بعد الإصلاح', type: 'image', required: true, step: 1, order: 2 }
+    ],
+    features: {
+        enableWhatsApp: true,
+        requireEvidenceBefore: true,
+        requireEvidenceAfter: true,
+        autoAssign: false
+    }
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -34,9 +57,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadSystemData = async () => {
     try {
       const sysConfig = await api.getSystemConfig();
-      setConfig(sysConfig);
+      // Use DB config if available, otherwise fallback to DEFAULT_CONFIG
+      if (sysConfig) {
+          setConfig(sysConfig);
+      } else {
+          console.warn("No config found in DB, using default.");
+          setConfig(DEFAULT_CONFIG);
+      }
     } catch (e) {
-      console.error("Failed to load config", e);
+      console.error("Failed to load config, using default", e);
+      setConfig(DEFAULT_CONFIG);
     }
   };
 
@@ -59,21 +89,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Auth Logic
   const login = async (role: Role) => {
     setIsLoading(true);
-    const users = await api.getUsers();
-    let loggedUser = users.find(u => u.role === role);
-    
-    // Fallback for demo
-    if (!loggedUser) {
-        if(role === Role.ADMIN) loggedUser = { id: 'adm-demo', name: 'المدير العام', role: Role.ADMIN };
-        if(role === Role.BRANCH_MANAGER) loggedUser = { id: 'br-demo', name: 'مدير الفرع', role: Role.BRANCH_MANAGER, branchId: 'br-1' };
-        if(role === Role.TECHNICIAN) loggedUser = { id: 'tech-demo', name: 'فني الصيانة', role: Role.TECHNICIAN };
-    }
+    try {
+        const users = await api.getUsers();
+        let loggedUser = users.find(u => u.role === role);
+        
+        // Fallback for demo / first run
+        if (!loggedUser) {
+            if(role === Role.ADMIN) loggedUser = { id: 'adm-demo', name: 'المدير العام', role: Role.ADMIN };
+            if(role === Role.BRANCH_MANAGER) loggedUser = { id: 'br-demo', name: 'مدير الفرع', role: Role.BRANCH_MANAGER, branchId: 'br-mns-1' }; // Linked to Mansoura 1
+            if(role === Role.TECHNICIAN) loggedUser = { id: 'tech-demo', name: 'فني الصيانة', role: Role.TECHNICIAN };
+        }
 
-    if (loggedUser) {
-        setUser(loggedUser);
-        localStorage.setItem('ems_session_user', JSON.stringify(loggedUser));
+        if (loggedUser) {
+            setUser(loggedUser);
+            localStorage.setItem('ems_session_user', JSON.stringify(loggedUser));
+        }
+    } catch (e) {
+        console.error("Login error", e);
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const logout = () => {
@@ -90,8 +125,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...config, 
           [section]: [...config[section], field] 
       };
+      setConfig(newConfig); // Optimistic Update
       await api.saveSystemConfig(newConfig);
-      setConfig(newConfig);
   };
 
   const removeField = async (section: ConfigSection, fieldId: string) => {
@@ -100,8 +135,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...config,
           [section]: config[section].filter(f => f.id !== fieldId)
       };
-      await api.saveSystemConfig(newConfig);
       setConfig(newConfig);
+      await api.saveSystemConfig(newConfig);
   };
 
   const updateField = async (section: ConfigSection, fieldId: string, updates: Partial<DynamicField>) => {
@@ -110,8 +145,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...config,
           [section]: config[section].map(f => f.id === fieldId ? { ...f, ...updates } : f)
       };
-      await api.saveSystemConfig(newConfig);
       setConfig(newConfig);
+      await api.saveSystemConfig(newConfig);
   };
 
   const updateFieldOrder = async (section: ConfigSection, sourceIndex: number, destIndex: number) => {
@@ -120,19 +155,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const [removed] = list.splice(sourceIndex, 1);
       list.splice(destIndex, 0, removed);
       
-      // Update order property
       const updatedList = list.map((item, index) => ({ ...item, order: index + 1 }));
 
       const newConfig = { ...config, [section]: updatedList };
-      await api.saveSystemConfig(newConfig);
       setConfig(newConfig);
+      await api.saveSystemConfig(newConfig);
+  };
+
+  const reorderFields = async (section: ConfigSection, newOrder: DynamicField[]) => {
+      if (!config) return;
+      
+      const updatedList = newOrder.map((item, index) => ({ ...item, order: index + 1 }));
+
+      const newConfig = { ...config, [section]: updatedList };
+      setConfig(newConfig);
+      await api.saveSystemConfig(newConfig);
   };
 
   const updateFeature = async (feature: string, value: boolean) => {
       if (!config) return;
       const newConfig = { ...config, features: { ...config.features, [feature]: value } };
-      await api.saveSystemConfig(newConfig);
       setConfig(newConfig);
+      await api.saveSystemConfig(newConfig);
+  };
+
+  // --- Management Functions ---
+  const manageUser = async (action: 'SAVE' | 'DELETE', data: Partial<User>) => {
+      if (action === 'SAVE' && data.name && data.role) {
+          const userToSave = { ...data, id: data.id || `u-${Date.now()}` } as User;
+          await api.saveUser(userToSave);
+      } else if (action === 'DELETE' && data.id) {
+          await api.deleteUser(data.id);
+      }
+  };
+
+  const manageBranch = async (action: 'SAVE' | 'DELETE', data: Partial<Branch>) => {
+      if (action === 'SAVE' && data.name) {
+          const branchToSave = { ...data, id: data.id || `b-${Date.now()}` } as Branch;
+          await api.saveBranch(branchToSave);
+      } else if (action === 'DELETE' && data.id) {
+          await api.deleteBranch(data.id);
+      }
   };
 
   // --- Report Creation Logic ---
@@ -140,7 +203,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const createReport = async (reportData: Partial<Report>, dynamicValues: Record<string, any>): Promise<Report> => {
       if (!config) throw new Error("Config not loaded");
 
-      // Build dynamicAnswers snapshot
       const dynamicAnswers: ReportAnswer[] = [];
       const allFields = [...config.reportQuestions, ...config.repairFields];
       
@@ -149,7 +211,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (fieldDef && value) {
               dynamicAnswers.push({
                   fieldId: key,
-                  labelAr: fieldDef.labelAr, // Snapshot the Arabic Label
+                  labelAr: fieldDef.labelAr,
                   value: value,
                   type: fieldDef.type
               });
@@ -164,8 +226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           imagesBefore: [],
           imagesAfter: [],
           dynamicData: dynamicValues,
-          dynamicAnswers: dynamicAnswers, // New Field
-          // Defaults
+          dynamicAnswers: dynamicAnswers,
           branchId: '',
           branchName: '',
           createdByUserId: '',
@@ -190,7 +251,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeField,
         updateField,
         updateFieldOrder,
+        reorderFields,
         updateFeature,
+        manageUser,
+        manageBranch,
         createReport 
     }}>
       {children}

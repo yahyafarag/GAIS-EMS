@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion, HTMLMotionProps } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
@@ -6,6 +7,11 @@ interface ButtonProps extends HTMLMotionProps<"button"> {
   variant?: 'primary' | 'secondary' | 'glass' | 'danger';
   isLoading?: boolean;
   icon?: React.ElementType;
+  children?: React.ReactNode;
+  className?: string;
+  disabled?: boolean;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  type?: "button" | "submit" | "reset";
 }
 
 export const Button: React.FC<ButtonProps> = ({ 

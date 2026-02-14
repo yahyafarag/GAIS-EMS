@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { api } from '../../../services/api';
 import { Report, ReportStatus, ReportPriority, User, Role } from '../../../types';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -14,6 +14,9 @@ export const AdminReports: React.FC = () => {
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [reviewingReport, setReviewingReport] = useState<Report | null>(null);
 
+  // Auto-open ref
+  const hasAutoOpened = useRef(false);
+
   // --- Pagination & Filter States ---
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -24,6 +27,17 @@ export const AdminReports: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-open rep-203 when reports are loaded
+  useEffect(() => {
+    if (reports.length > 0 && !hasAutoOpened.current) {
+        const target = reports.find(r => r.id === 'rep-203');
+        if (target) {
+            setReviewingReport(target);
+            hasAutoOpened.current = true;
+        }
+    }
+  }, [reports]);
 
   const loadData = async () => {
     const [r, u] = await Promise.all([api.getReports(), api.getUsers()]);

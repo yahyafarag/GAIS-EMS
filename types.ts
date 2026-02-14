@@ -49,21 +49,48 @@ export interface SystemConfig {
   features: SystemFeatures;
 }
 
+// --- Inventory & Spare Parts Schema ---
+
+export interface SparePart {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  quantity: number;
+  minLevel: number; // Reorder Level
+  category?: string;
+}
+
+export interface PartUsage {
+  partId: string;
+  partName: string;
+  quantity: number;
+  unitPrice: number;
+  totalCost: number;
+}
+
 // --- Core Entities ---
 
 export interface User {
   id: string;
   name: string;
+  username?: string; // New: For login
+  password?: string; // New: For auth management
   role: Role;
   branchId?: string;
   avatar?: string;
+  phone?: string; // Added for WhatsApp
 }
 
 export interface Branch {
   id: string;
   name: string;
   location: string;
+  brand?: string; // Added Brand Field
   managerId?: string;
+  phone?: string; // Added for WhatsApp
+  lat?: number;
+  lng?: number;
 }
 
 export interface ReportLog {
@@ -108,9 +135,14 @@ export interface Report {
   locationCoords?: { lat: number; lng: number };
   imagesBefore: string[];
   imagesAfter: string[];
-  cost?: number;
-  partsUsed?: string;
+  
+  // Financials & Parts
+  cost?: number; // Total Cost (Labor + Parts)
+  partsUsed?: string; // Legacy string description
+  partsUsageList?: PartUsage[]; // New Structured Data
+  
   adminNotes?: string;
   
   logs: ReportLog[];
+  completedAt?: string;
 }

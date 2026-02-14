@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertCircle, XCircle, Info } from 'lucide-react';
@@ -45,7 +46,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 };
 
-const ToastItem = ({ toast, onClose }: { toast: Toast; onClose: () => void }) => {
+const ToastItem: React.FC<{ toast: Toast; onClose: () => void }> = ({ toast, onClose }) => {
   const styles = {
     success: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-100',
     error: 'bg-red-500/20 border-red-500/50 text-red-100',

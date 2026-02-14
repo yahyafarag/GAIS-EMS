@@ -423,7 +423,7 @@ export const BranchWizard: React.FC = () => {
 };
 
 // Simple helper for review items
-const ReviewItem = ({ label, value }: { label: string, value: any }) => {
+const ReviewItem: React.FC<{ label: string, value: any }> = ({ label, value }) => {
     if (!value) return null;
     return (
         <div className="flex justify-between items-start border-b border-white/5 pb-2 last:border-0">
