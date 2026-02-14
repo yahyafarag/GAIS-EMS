@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { api } from '../../../services/api';
 import { Branch, User, Role, Report, ReportPriority, ReportStatus } from '../../../types';
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { Navigation, AlertTriangle, User as UserIcon, MapPin, Radio } from 'lucide-react';
+import { Navigation, AlertTriangle, User as UserIcon, MapPin, Radio, Wrench } from 'lucide-react';
 
 // --- Types for Map Data ---
 interface MapEntity {
@@ -290,25 +290,92 @@ export const AdminMap: React.FC = () => {
         ))}
 
         {/* --- Render Technicians --- */}
-        {technicians.map(tech => (
-            <Marker 
-                key={tech.id} 
-                position={[tech.lat, tech.lng]} 
-                icon={createTechIcon(tech.avatar || 'https://picsum.photos/50')}
-            >
-                <Popup>
-                    <div className="text-right p-1">
-                        <div className="flex items-center gap-2 mb-1">
-                            <img src={tech.avatar || 'https://picsum.photos/50'} className="w-8 h-8 rounded-full" />
-                            <div>
-                                <h4 className="font-bold text-emerald-400 text-sm">{tech.name}</h4>
-                                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1 rounded">متصل</span>
+        {technicians.map(tech => {
+            // Logic for popup data: Current Task
+            const activeReport = reports.find(r => r.assignedTechnicianId === tech.id && (r.status === ReportStatus.ASSIGNED || r.status === ReportStatus.IN_PROGRESS));
+            
+            // Logic for popup data: Nearest Critical
+            let nearestCritical = null;
+            let minDist = Infinity;
+
+            reports.forEach(r => {
+                if (r.priority === ReportPriority.CRITICAL && r.status !== ReportStatus.CLOSED && r.status !== ReportStatus.COMPLETED) {
+                    const branch = branches.find(b => b.id === r.branchId);
+                    if (branch) {
+                        const d = getDistance(tech.lat, tech.lng, branch.lat, branch.lng);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestCritical = { id: r.id, dist: d };
+                        }
+                    }
+                }
+            });
+
+            // Calculate ETA (assuming 40 km/h average city speed)
+            const etaMinutes = nearestCritical ? Math.ceil((nearestCritical.dist / 40) * 60) : null;
+
+            return (
+                <Marker 
+                    key={tech.id} 
+                    position={[tech.lat, tech.lng]} 
+                    icon={createTechIcon(tech.avatar || 'https://picsum.photos/50')}
+                >
+                    <Popup className="glass-popup">
+                        <div className="text-right p-2 min-w-[220px]">
+                            
+                            {/* Header */}
+                            <div className="flex items-center gap-3 mb-3 border-b border-white/10 pb-2">
+                                <img src={tech.avatar || 'https://picsum.photos/50'} className="w-10 h-10 rounded-full border border-emerald-500" />
+                                <div>
+                                    <h4 className="font-bold text-emerald-400 text-sm">{tech.name}</h4>
+                                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">متصل الآن</span>
+                                </div>
                             </div>
+
+                            {/* Current Task Section */}
+                            <div className="mb-3">
+                                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold uppercase mb-1">
+                                    <Wrench size={10} /> المهمة الحالية
+                                </div>
+                                {activeReport ? (
+                                    <div className="bg-slate-800/50 rounded-lg p-2 border border-white/5">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="text-indigo-300 font-mono text-xs">#{activeReport.id.split('-')[1]}</span>
+                                            <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1 rounded">{activeReport.status}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-300 leading-snug line-clamp-2">{activeReport.description}</p>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-slate-500 italic bg-slate-800/30 p-2 rounded">
+                                        لا توجد مهام نشطة حالياً
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Nearest Critical Section */}
+                            {nearestCritical && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="flex items-center gap-1 text-[10px] text-red-400 font-bold uppercase mb-1">
+                                        <AlertTriangle size={10} /> أقرب حالة حرجة
+                                    </div>
+                                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-red-200 font-mono text-xs">#{nearestCritical.id.split('-')[1]}</span>
+                                            <span className="text-red-400 text-xs font-bold">{nearestCritical.dist.toFixed(1)} كم</span>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-500/10">
+                                            <span className="text-[10px] text-red-300">الوصول المتوقع (ETA)</span>
+                                            <span className="text-sm font-bold text-white font-mono">{etaMinutes} دقيقة</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
-                    </div>
-                </Popup>
-            </Marker>
-        ))}
+                    </Popup>
+                </Marker>
+            );
+        })}
 
         {/* --- Dynamic Routing Polyline --- */}
         {routeData && (
