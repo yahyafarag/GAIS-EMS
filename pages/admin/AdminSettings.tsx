@@ -54,6 +54,7 @@ export const AdminSettings: React.FC = () => {
                              {key === 'requireEvidenceBefore' && 'إلزامية تصوير العطل'}
                              {key === 'requireEvidenceAfter' && 'إلزامية تصوير الإصلاح'}
                              {key === 'autoAssign' && 'التعيين التلقائي للفنيين'}
+                             {key === 'requireLocationEnforcement' && 'إلزامية الموقع الجغرافي للفني (Geofence)'}
                          </span>
                          <label className="relative inline-flex items-center cursor-pointer">
                             <input 

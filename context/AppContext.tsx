@@ -42,7 +42,8 @@ const DEFAULT_CONFIG: SystemConfig = {
         enableWhatsApp: true,
         requireEvidenceBefore: true,
         requireEvidenceAfter: true,
-        autoAssign: false
+        autoAssign: false,
+        requireLocationEnforcement: true // Default: Location check is ON
     }
 };
 
@@ -59,7 +60,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const sysConfig = await api.getSystemConfig();
       // Use DB config if available, otherwise fallback to DEFAULT_CONFIG
       if (sysConfig) {
-          setConfig(sysConfig);
+          // Ensure new features exist in old configs (Merge)
+          setConfig({
+              ...sysConfig,
+              features: { ...DEFAULT_CONFIG.features, ...sysConfig.features }
+          });
       } else {
           console.warn("No config found in DB, using default.");
           setConfig(DEFAULT_CONFIG);

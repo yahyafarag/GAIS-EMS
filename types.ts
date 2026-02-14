@@ -41,6 +41,7 @@ export interface SystemFeatures {
   requireEvidenceBefore: boolean;
   requireEvidenceAfter: boolean;
   autoAssign: boolean;
+  requireLocationEnforcement: boolean; // New Feature Flag
 }
 
 export interface SystemConfig {
@@ -91,6 +92,7 @@ export interface Branch {
   phone?: string; // Added for WhatsApp
   lat?: number;
   lng?: number;
+  mapLink?: string; // New: Google Maps Link
 }
 
 export interface ReportLog {

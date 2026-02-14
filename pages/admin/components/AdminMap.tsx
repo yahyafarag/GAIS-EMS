@@ -5,7 +5,7 @@ import L from 'leaflet';
 import { api } from '../../../services/api';
 import { Branch, User, Role, Report, ReportPriority, ReportStatus } from '../../../types';
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { AlertTriangle, MapPin, Radio, Users, Clock, Ruler, Navigation } from 'lucide-react';
+import { AlertTriangle, MapPin, Radio, Users, Clock, Ruler, Navigation, ExternalLink, Phone, User as UserIcon, Building2 } from 'lucide-react';
 
 // --- Types for Map Data ---
 interface MapEntity {
@@ -15,6 +15,8 @@ interface MapEntity {
 
 interface MapBranch extends Omit<Branch, 'lat' | 'lng'>, MapEntity {
   hasCritical?: boolean;
+  managerName?: string;
+  activeReportsCount?: number;
 }
 
 interface MapTech extends User, MapEntity {
@@ -22,9 +24,11 @@ interface MapTech extends User, MapEntity {
 }
 
 // --- Constants ---
-const CENTER: [number, number] = [30.0444, 31.2357]; // Cairo
+const CENTER: [number, number] = [28.0, 30.8]; // Zoomed out view of Egypt
 
-// --- Helper: Haversine Distance ---
+// --- Helpers ---
+
+// Haversine Distance
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -37,26 +41,35 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return R * c;
 };
 
+// Brand Color Mapping
+const getBrandColor = (brand?: string) => {
+    if (!brand) return 'indigo';
+    if (brand.includes('بلبن')) return 'blue';
+    if (brand.includes('وهمى') || brand.includes('برجر')) return 'orange';
+    if (brand.includes('شلتت')) return 'emerald';
+    return 'indigo';
+};
+
 // --- Custom Icons ---
 
-const branchIcon = L.divIcon({
-  className: 'branch-marker',
-  html: `<div class="w-4 h-4 bg-indigo-500 rounded-full border-2 border-white shadow-[0_0_15px_#6366f1] relative z-10"></div>`,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8]
-});
-
-const criticalBranchIcon = L.divIcon({
-  className: 'critical-marker',
-  html: `
-    <div class="relative w-full h-full flex items-center justify-center">
-        <div class="absolute inset-0 bg-red-500 rounded-full opacity-50 animate-ping"></div>
-        <div class="relative w-5 h-5 bg-red-600 rounded-full border-2 border-white shadow-[0_0_20px_red] z-20"></div>
-    </div>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16]
-});
+const createBranchIcon = (brand: string, isCritical: boolean) => {
+    const colorClass = isCritical ? 'bg-red-500 shadow-red-500/50' : 
+                      brand.includes('بلبن') ? 'bg-blue-500 shadow-blue-500/50' :
+                      brand.includes('وهمى') ? 'bg-orange-500 shadow-orange-500/50' : 
+                      'bg-indigo-500 shadow-indigo-500/50';
+    
+    return L.divIcon({
+        className: 'custom-branch-marker',
+        html: `
+            <div class="relative group">
+                ${isCritical ? '<div class="absolute inset-0 rounded-full animate-ping bg-red-500 opacity-75"></div>' : ''}
+                <div class="w-4 h-4 rounded-full border-2 border-white shadow-[0_0_15px] ${colorClass} relative z-10 transition-transform duration-300 group-hover:scale-125"></div>
+            </div>
+        `,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+    });
+};
 
 const createTechIcon = (avatar: string) => L.divIcon({
   className: 'tech-marker',
@@ -76,7 +89,6 @@ const createTechIcon = (avatar: string) => L.divIcon({
 export const AdminMap: React.FC = () => {
   const [branches, setBranches] = useState<MapBranch[]>([]);
   const [technicians, setTechnicians] = useState<MapTech[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
   
   // Interaction State
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
@@ -84,42 +96,61 @@ export const AdminMap: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       // Fetch Real Data
-      const [u, r, b] = await Promise.all([api.getUsers(), api.getReports(), api.getBranches()]);
-      setReports(r);
+      const [users, reports, apiBranches] = await Promise.all([
+          api.getUsers(), 
+          api.getReports(), 
+          api.getBranches()
+      ]);
 
-      // Map Real Branches
-      const realBranches = b.map(branch => {
-          const hasCritical = r.some(rep => rep.branchId === branch.id && rep.priority === ReportPriority.CRITICAL && rep.status !== ReportStatus.CLOSED);
+      // 1. Process Branches (Use Real Coordinates)
+      const processedBranches: MapBranch[] = apiBranches.map(branch => {
+          // Find active reports for this branch
+          const branchReports = reports.filter(r => r.branchId === branch.id && r.status !== ReportStatus.CLOSED && r.status !== ReportStatus.COMPLETED);
+          const hasCritical = branchReports.some(r => r.priority === ReportPriority.CRITICAL);
+          
+          // Find manager name
+          const manager = users.find(u => u.id === branch.managerId);
+
           return {
               ...branch,
-              lat: branch.lat || 30.0444,
+              lat: branch.lat || 30.0444, // Fallback if missing
               lng: branch.lng || 31.2357,
-              hasCritical
+              hasCritical,
+              activeReportsCount: branchReports.length,
+              managerName: manager?.name
           };
       });
-      setBranches(realBranches);
 
-      // Setup Technicians (Simulated locations for demo purposes)
-      const techs = u.filter(user => user.role === Role.TECHNICIAN).map(t => ({
-          ...t,
-          lat: 30.0444 + (Math.random() - 0.5) * 0.2,
-          lng: 31.2357 + (Math.random() - 0.5) * 0.2,
-          heading: Math.random() * 360
-      }));
+      setBranches(processedBranches);
+
+      // 2. Setup Technicians (Simulate location around active branches for demo)
+      // In production, this would come from real GPS tracking API
+      const techs = users.filter(user => user.role === Role.TECHNICIAN).map((t, idx) => {
+          // Distribute techs somewhat randomly near Cairo/Alex for demo
+          const baseLat = idx % 2 === 0 ? 30.0444 : 31.2001;
+          const baseLng = idx % 2 === 0 ? 31.2357 : 29.9187;
+          
+          return {
+              ...t,
+              lat: baseLat + (Math.random() - 0.5) * 0.1,
+              lng: baseLng + (Math.random() - 0.5) * 0.1,
+              heading: Math.random() * 360
+          };
+      });
       setTechnicians(techs);
     };
 
     init();
   }, []);
 
-  // Movement Simulation Loop
+  // Movement Simulation Loop (Visual Candy)
   useEffect(() => {
       const interval = setInterval(() => {
           setTechnicians(prevTechs => prevTechs.map(t => {
-              const speed = 0.0005; 
+              const speed = 0.0003; 
               const dLat = Math.cos(t.heading! * (Math.PI / 180)) * speed;
               const dLng = Math.sin(t.heading! * (Math.PI / 180)) * speed;
-              const newHeading = (t.heading! + (Math.random() - 0.5) * 30) % 360;
+              const newHeading = (t.heading! + (Math.random() - 0.5) * 30) % 360; // Random turn
 
               return {
                   ...t,
@@ -153,7 +184,7 @@ export const AdminMap: React.FC = () => {
 
       if (!nearestTech) return null;
 
-      // Estimate ETA (40km/h average speed)
+      // Estimate ETA (40km/h average speed in city)
       const eta = Math.ceil((minDist / 40) * 60);
 
       return {
@@ -170,18 +201,17 @@ export const AdminMap: React.FC = () => {
     <GlassCard className="h-[calc(100vh-140px)] w-full overflow-hidden relative border-0 rounded-none md:rounded-2xl shadow-2xl">
       
       <style>{`
-        @keyframes ping {
-            75%, 100% { transform: scale(2); opacity: 0; }
+        .leaflet-popup-content-wrapper {
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255,255,255,0.1);
         }
-        .animate-ping {
-            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-        .leaflet-popup-close-button {
-            color: #94a3b8 !important;
+        .leaflet-popup-tip {
+            background: rgba(15, 23, 42, 0.95) !important;
         }
       `}</style>
 
-      {/* HUD */}
+      {/* HUD Overlay */}
       <div className="absolute top-4 right-4 z-[500] pointer-events-none flex flex-col gap-2">
           <GlassCard className="p-4 bg-slate-900/90 backdrop-blur-xl border-slate-700 pointer-events-auto min-w-[240px]">
               <h3 className="font-bold text-white flex items-center gap-2 mb-3 border-b border-white/10 pb-2">
@@ -190,7 +220,7 @@ export const AdminMap: React.FC = () => {
               </h3>
               <div className="space-y-3 text-xs">
                   <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-2"><MapPin size={12} /> الفروع النشطة</span>
+                      <span className="text-slate-400 flex items-center gap-2"><MapPin size={12} /> الفروع المسجلة</span>
                       <span className="text-indigo-400 font-mono font-bold text-lg">{branches.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -207,7 +237,7 @@ export const AdminMap: React.FC = () => {
 
       <MapContainer 
         center={CENTER} 
-        zoom={7} 
+        zoom={6} 
         scrollWheelZoom={true} 
         style={{ height: '100%', width: '100%', background: '#0f172a' }}
       >
@@ -219,71 +249,119 @@ export const AdminMap: React.FC = () => {
 
         {branches.map(branch => {
             const isSelected = selectedBranchId === branch.id;
-            
+            const googleMapsUrl = branch.mapLink || `https://www.google.com/maps/search/?api=1&query=${branch.lat},${branch.lng}`;
+            const brandColor = getBrandColor(branch.brand);
+
             return (
                 <Marker 
                     key={branch.id} 
                     position={[branch.lat, branch.lng]} 
-                    icon={branch.hasCritical ? criticalBranchIcon : branchIcon}
+                    icon={createBranchIcon(branch.brand || '', !!branch.hasCritical)}
                     eventHandlers={{
                         click: () => setSelectedBranchId(branch.id)
                     }}
                 >
-                    <Popup className="glass-popup" minWidth={280}>
-                        <div className="text-right p-2 w-full">
-                            {/* Branch Name Header */}
-                            <div className="border-b border-white/10 pb-2 mb-2">
-                                <h4 className={`font-bold text-lg ${branch.hasCritical ? 'text-red-400' : 'text-indigo-400'}`}>
-                                    {branch.name}
-                                </h4>
-                                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-1">
-                                    <MapPin size={10} /> {branch.location}
+                    <Popup className="glass-popup" minWidth={300} maxWidth={320}>
+                        <div className="text-right p-1 w-full" dir="rtl">
+                            {/* Header: Brand & Status */}
+                            <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+                                {branch.brand && (
+                                    <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase
+                                        ${brandColor === 'blue' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 
+                                          brandColor === 'orange' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : 
+                                          'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'}`}>
+                                        {branch.brand}
+                                    </span>
+                                )}
+                                {branch.hasCritical ? (
+                                    <span className="flex items-center gap-1 text-[10px] bg-red-500 text-white px-2 py-0.5 rounded font-bold animate-pulse">
+                                        <AlertTriangle size={10} /> طوارئ
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> مستقر
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Branch Info */}
+                            <h4 className="font-bold text-lg text-white mb-2 leading-tight flex items-start gap-2">
+                                <Building2 size={18} className="text-slate-500 mt-1 shrink-0" />
+                                {branch.name}
+                            </h4>
+                            
+                            <div className="space-y-2 mb-4 bg-slate-900/50 p-3 rounded-lg border border-white/5">
+                                <div className="flex items-start gap-2 text-xs text-slate-300">
+                                    <MapPin size={14} className="text-slate-500 shrink-0 mt-0.5" />
+                                    <span className="leading-relaxed">{branch.location}</span>
+                                </div>
+                                {branch.managerName && (
+                                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                                        <UserIcon size={14} className="text-slate-500 shrink-0" />
+                                        <span>المدير: {branch.managerName}</span>
+                                    </div>
+                                )}
+                                {branch.phone && (
+                                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                                        <Phone size={14} className="text-slate-500 shrink-0" />
+                                        <span dir="ltr" className="text-right">{branch.phone}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Stats */}
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="bg-slate-800 p-2 rounded text-center">
+                                    <span className="block text-[10px] text-slate-500">بلاغات نشطة</span>
+                                    <span className="text-sm font-bold text-white">{branch.activeReportsCount || 0}</span>
+                                </div>
+                                <div className="bg-slate-800 p-2 rounded text-center">
+                                    <span className="block text-[10px] text-slate-500">الفنيين بالجوار</span>
+                                    {/* Calculated dynamically just for visual */}
+                                    <span className="text-sm font-bold text-indigo-400">
+                                        {technicians.filter(t => getDistance(branch.lat, branch.lng, t.lat, t.lng) < 50).length}
+                                    </span>
                                 </div>
                             </div>
-                            
-                            {branch.hasCritical && (
-                                <div className="mb-2 bg-red-500/10 text-red-400 text-xs px-2 py-2 rounded-lg border border-red-500/20 flex items-center gap-2 font-bold animate-pulse">
-                                    <AlertTriangle size={14} /> يوجد بلاغ حرج
-                                </div>
-                            )}
 
-                            {isSelected && routeData ? (
-                                <div className="animate-in fade-in zoom-in duration-300 bg-slate-800/50 rounded-xl p-3 border border-white/5 mt-2">
-                                    {/* Nearest Tech Section */}
-                                    <div className="flex items-center gap-3 mb-3 border-b border-white/5 pb-2">
-                                        <img src={routeData.tech.avatar || 'https://picsum.photos/50'} className="w-10 h-10 rounded-full border border-emerald-500 shadow-md" />
-                                        <div>
-                                            <span className="text-[10px] text-emerald-400 block mb-0.5 font-bold">أقرب فني متاح</span>
-                                            <h5 className="font-bold text-white text-sm">{routeData.tech.name}</h5>
-                                        </div>
+                            {/* Actions */}
+                            <div className="flex gap-2">
+                                <a 
+                                    href={googleMapsUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-xs py-2 rounded-lg transition-colors font-bold flex items-center justify-center gap-2 border border-white/10"
+                                >
+                                    <ExternalLink size={12} /> الخريطة
+                                </a>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedBranchId(branch.id);
+                                    }}
+                                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-lg transition-colors font-bold shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+                                >
+                                    <Navigation size={12} /> طلب فني
+                                </button>
+                            </div>
+
+                            {/* Route Info Section (If Selected) */}
+                            {isSelected && routeData && (
+                                <div className="mt-3 pt-3 border-t border-white/10 animate-in fade-in zoom-in duration-300">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        <span className="text-[10px] text-emerald-400 font-bold uppercase">تم تحديد أقرب فني</span>
                                     </div>
-                                    
-                                    {/* Stats Grid */}
-                                    <div className="grid grid-cols-2 gap-2 mb-3">
-                                        <div className="bg-slate-900 p-2 rounded-lg text-center border border-white/5">
-                                            <span className="text-[10px] text-slate-500 block mb-1">المسافة</span>
-                                            <div className="flex items-center justify-center gap-1 text-emerald-400">
-                                                <Ruler size={14} />
-                                                <span className="text-sm font-mono font-bold">{routeData.distance} كم</span>
+                                    <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
+                                        <img src={routeData.tech.avatar || 'https://picsum.photos/50'} className="w-8 h-8 rounded-full border border-emerald-500" />
+                                        <div className="flex-1">
+                                            <h5 className="font-bold text-white text-xs">{routeData.tech.name}</h5>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <span className="text-[10px] text-emerald-300 flex items-center gap-1"><Ruler size={10} /> {routeData.distance} كم</span>
+                                                <span className="text-[10px] text-emerald-300 flex items-center gap-1"><Clock size={10} /> {routeData.eta} دقيقة</span>
                                             </div>
                                         </div>
-                                        <div className="bg-slate-900 p-2 rounded-lg text-center border border-white/5">
-                                            <span className="text-[10px] text-slate-500 block mb-1">زمن الوصول</span>
-                                            <div className="flex items-center justify-center gap-1 text-emerald-400">
-                                                <Clock size={14} />
-                                                <span className="text-sm font-mono font-bold">{routeData.eta} دقيقة</span>
-                                            </div>
-                                        </div>
                                     </div>
-
-                                    <button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2.5 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 transition-all">
-                                        <Navigation size={14} /> إسناد المهمة للفني
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="text-center py-4">
-                                    <div className="animate-spin h-5 w-5 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-                                    <span className="text-[10px] text-slate-500">جاري حساب المسافات...</span>
                                 </div>
                             )}
                         </div>

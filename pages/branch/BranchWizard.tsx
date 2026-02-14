@@ -106,7 +106,16 @@ export const BranchWizard: React.FC = () => {
       if (currentStep === 2) {
           return config.reportQuestions
             .filter(f => f.type !== 'image' && f.type !== 'gps')
-            .sort((a, b) => a.order - b.order);
+            .sort((a, b) => a.order - b.order)
+            .map(f => ({
+                ...f,
+                // Inject enhanced default placeholders if missing
+                placeholder: f.placeholder || (
+                    f.type === 'textarea' ? 'يرجى وصف العطل بدقة (مثال: صوت غريب، توقف كامل، دخان...)' : 
+                    f.type === 'number' ? '0' :
+                    'أدخل البيانات هنا...'
+                )
+            }));
       }
       if (currentStep === 3) {
           return config.reportQuestions
@@ -284,7 +293,9 @@ export const BranchWizard: React.FC = () => {
                     </div>
 
                     <div className="max-w-md mx-auto w-full">
-                        <label className="block text-sm text-slate-300 mb-2 font-bold">الفرع</label>
+                        <label className="block text-sm text-slate-300 mb-2 font-bold">
+                            الفرع <span className="text-red-400">*</span>
+                        </label>
                         <select 
                             value={selectedBranchId}
                             onChange={(e) => setSelectedBranchId(e.target.value)}

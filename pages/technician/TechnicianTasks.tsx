@@ -74,6 +74,12 @@ export const TechnicianTasks: React.FC = () => {
 
   // --- Geofencing Logic ---
   const validateLocation = async (task: Report): Promise<boolean> => {
+      // Check Admin Config for Feature Flag
+      if (config?.features.requireLocationEnforcement === false) {
+          // Feature disabled by admin
+          return true;
+      }
+
       if (!task.locationCoords) {
           showToast('تنبيه: هذا البلاغ لا يحتوي على إحداثيات GPS. سيتم تجاوز التحقق.', 'warning');
           return true;

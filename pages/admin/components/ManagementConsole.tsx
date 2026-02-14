@@ -6,7 +6,7 @@ import { User, Branch, Role } from '../../../types';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { GlassInput } from '../../../components/ui/GlassInput';
-import { Users, Building, Plus, Edit, Trash2, Key, Search, MapPin, UserCheck, Shield } from 'lucide-react';
+import { Users, Building, Plus, Edit, Trash2, Key, Search, MapPin, UserCheck, Shield, Map as MapIcon, Link } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Types ---
@@ -221,6 +221,17 @@ const BranchList = ({ branches, onRefresh, onAdd, onEdit }: any) => {
                                 <Building size={24} />
                             </div>
                             <div className="flex gap-1">
+                                {b.mapLink && (
+                                    <a 
+                                        href={b.mapLink} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="p-2 hover:bg-emerald-500/10 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
+                                        title="View on Map"
+                                    >
+                                        <MapIcon size={16} />
+                                    </a>
+                                )}
                                 <button onClick={() => onEdit(b)} className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white" title="تعديل بيانات الفرع"><Edit size={16} /></button>
                                 <button onClick={() => handleDelete(b.id)} className="p-2 hover:bg-red-500/10 rounded-lg text-red-400" title="حذف الفرع"><Trash2 size={16} /></button>
                             </div>
@@ -329,11 +340,11 @@ const UserModal = ({ isOpen, onClose, user, branches, onSave }: any) => {
 
 const BranchModal = ({ isOpen, onClose, branch, onSave }: any) => {
     const { manageBranch } = useApp();
-    const [form, setForm] = useState<Partial<Branch>>({ name: '', location: '', brand: '' });
+    const [form, setForm] = useState<Partial<Branch>>({ name: '', location: '', brand: '', lat: 30.0444, lng: 31.2357, mapLink: '' });
 
     useEffect(() => {
         if(branch) setForm(branch);
-        else setForm({ name: '', location: '', brand: BRANDS[0] });
+        else setForm({ name: '', location: '', brand: BRANDS[0], lat: 30.0444, lng: 31.2357, mapLink: '' });
     }, [branch]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -348,7 +359,7 @@ const BranchModal = ({ isOpen, onClose, branch, onSave }: any) => {
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-             <GlassCard className="w-full max-w-md">
+             <GlassCard className="w-full max-w-md max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit}>
                     <div className="p-6 border-b border-white/10">
                         <h2 className="text-xl font-bold">{branch ? 'تعديل بيانات الفرع' : 'إضافة فرع جديد'}</h2>
@@ -377,11 +388,35 @@ const BranchModal = ({ isOpen, onClose, branch, onSave }: any) => {
                         </div>
 
                         <GlassInput 
-                            label="الموقع / المدينة" 
+                            label="العنوان" 
                             value={form.location} 
                             onChange={v => setForm({...form, location: v})} 
                             required 
                             placeholder="مثال: القاهرة"
+                        />
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <GlassInput 
+                                label="خط العرض (Lat)" 
+                                type="number"
+                                value={form.lat} 
+                                onChange={v => setForm({...form, lat: parseFloat(v)})} 
+                                placeholder="30.0..."
+                            />
+                            <GlassInput 
+                                label="خط الطول (Lng)" 
+                                type="number"
+                                value={form.lng} 
+                                onChange={v => setForm({...form, lng: parseFloat(v)})} 
+                                placeholder="31.2..."
+                            />
+                        </div>
+
+                        <GlassInput 
+                            label="رابط الخريطة (Google Maps)" 
+                            value={form.mapLink} 
+                            onChange={v => setForm({...form, mapLink: v})} 
+                            placeholder="https://maps.google.com/..."
                         />
                         
                         <div className="flex gap-3 mt-6">
