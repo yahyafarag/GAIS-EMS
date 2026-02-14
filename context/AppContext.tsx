@@ -32,7 +32,8 @@ interface AppContextType {
 const DEFAULT_CONFIG: SystemConfig = {
     reportQuestions: [
         { id: 'q1', labelAr: 'وصف المشكلة بالتفصيل', type: 'textarea', required: true, step: 1, order: 1 },
-        { id: 'q2', labelAr: 'صورة للمشكلة', type: 'image', required: true, step: 1, order: 2 }
+        { id: 'q2', labelAr: 'صورة للمشكلة', type: 'image', required: true, step: 1, order: 2 },
+        { id: 'q3', labelAr: 'موقع الفرع على الخريطة', type: 'gps', required: true, step: 1, order: 5 }
     ],
     repairFields: [
         { id: 'r1', labelAr: 'تم الإصلاح عن طريق', type: 'textarea', required: true, step: 1, order: 1 },

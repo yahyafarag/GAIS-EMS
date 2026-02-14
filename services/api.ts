@@ -1,5 +1,6 @@
 
 import { googleCloud } from '../lib/googleCloud';
+import { supabase } from '../lib/supabase';
 import { Report, Branch, User, ReportStatus, SystemConfig, SparePart, ReportPriority, Role } from '../types';
 
 declare global {
@@ -209,27 +210,25 @@ export const api = {
   },
 
   saveBranch: async (branch: Branch): Promise<Branch> => {
-    await ensureAuth();
-    const branches = await api.getBranches();
-    const index = branches.findIndex(b => b.id === branch.id);
-    
-    if (index >= 0) {
-        const range = `Branches!A${index + 2}:I${index + 2}`;
-        await window.gapi.client.sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range,
-            valueInputOption: 'RAW',
-            resource: { values: [branchToRow(branch)] }
-        });
-    } else {
-        await window.gapi.client.sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_ID,
-            range: 'Branches!A2:I',
-            valueInputOption: 'RAW',
-            resource: { values: [branchToRow(branch)] }
-        });
+    const id = branch.id || `b-${Date.now()}`;
+    const { error } = await supabase.from('branches').upsert({
+      id: id,
+      name: branch.name,
+      location: branch.location,
+      brand: branch.brand,
+      lat: branch.lat,
+      lng: branch.lng,
+      manager_id: branch.managerId,
+      phone: branch.phone,
+      map_link: branch.mapLink
+    });
+
+    if (error) {
+        console.error("Supabase Save Branch Error:", error);
+        throw error;
     }
-    return branch;
+    
+    return { ...branch, id };
   },
 
   deleteBranch: async (id: string): Promise<void> => {},

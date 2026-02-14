@@ -36,6 +36,8 @@ create table public.branches (
   lng float,
   manager_id text,
   phone text,
+  brand text,
+  map_link text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
